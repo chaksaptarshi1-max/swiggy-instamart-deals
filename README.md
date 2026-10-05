@@ -167,6 +167,7 @@ In your forked GitHub repository:
 4. Click **Run workflow** → select `Skip top-of-hour wait sync (run immediately)` → Click **Run workflow**.
 5. Within ~30 seconds, all 7 workers will execute in parallel and you will receive high-discount deals directly on Telegram!
 6. From now on, GitHub Actions runs automatically **every 30 minutes** from **09:01 AM to 12:01 AM midnight IST**.
+7. *(Recommended)* Ensure your repository's **Settings → Actions → General → Workflow permissions** is set to **"Read and write permissions"** so the built-in auto-retry companion workflow can automatically re-run any worker that encounters a temporary GitHub runner allocation glitch.
 
 ---
 
