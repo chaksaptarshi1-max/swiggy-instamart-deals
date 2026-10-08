@@ -2,11 +2,10 @@ name: Swiggy Instamart Keyword Deal Hunter
 
 on:
   schedule:
-    # 30-Minute Interval Deal Hunter (09:01 AM to 12:01 AM midnight IST):
-    # Slot 1 (:01 past hour): 09:01 AM IST (03:31 UTC) through 12:01 AM midnight IST (18:31 UTC)
+    # 30-Minute Interval Deal Hunter (09:01 AM to 12:01 AM midnight IST)
     - cron: '31 3-18 * * *'
-    # Slot 2 (:31 past hour): 09:31 AM IST (04:01 UTC) through 11:31 PM IST (18:01 UTC)
     - cron: '1 4-18 * * *'
+
   workflow_dispatch:
     inputs:
       skip_sync:
@@ -20,11 +19,13 @@ jobs:
     name: Worker (${{ matrix.worker }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
         worker: [fresh, grocery, treats, munchies, beverages, personal, lifestyle]
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -68,12 +69,16 @@ jobs:
           USE_BROWSER: 'true'
           SKIP_SYNC: ${{ inputs.skip_sync }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+
         run: |
           EXTRA_FLAGS=""
+
           if [ "$SKIP_SYNC" = "true" ]; then
             EXTRA_FLAGS="--skip-sync"
           fi
+
           echo "Executing Deal Hunter Worker: ${{ matrix.worker }}..."
+
           node src/cron-runner.js ${{ matrix.worker }} $EXTRA_FLAGS
 
       - name: Save Deal Cache
@@ -83,10 +88,168 @@ jobs:
           path: swiggy-telegram-bot/data
           key: deal-cache-${{ matrix.worker }}-${{ github.run_id }}
 
-      - name: Upload Deal Results
+      - name: Upload Worker Results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: deal-results-${{ matrix.worker }}
           path: swiggy-telegram-bot/results/
           if-no-files-found: ignore
+
+
+  combine-results:
+    name: Create Combined CSV
+    runs-on: ubuntu-latest
+    needs: hunt
+    if: always()
+
+    steps:
+      - name: Download All Worker Results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deal-results-*
+          path: all-results
+          merge-multiple: false
+
+      - name: Create Combined CSV
+        shell: bash
+        run: |
+          mkdir -p combined
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = 'all-results';
+          const output = 'combined/all-deals.csv';
+
+          const rows = [];
+
+          function csvEscape(value) {
+            if (value === null || value === undefined) return '';
+
+            let text = String(value);
+
+            if (
+              text.includes('"') ||
+              text.includes(',') ||
+              text.includes('\n') ||
+              text.includes('\r')
+            ) {
+              text = '"' + text.replace(/"/g, '""') + '"';
+            }
+
+            return text;
+          }
+
+          function findJsonFiles(dir) {
+            if (!fs.existsSync(dir)) return [];
+
+            const results = [];
+
+            for (const entry of fs.readdirSync(dir, {
+              withFileTypes: true
+            })) {
+              const fullPath = path.join(dir, entry.name);
+
+              if (entry.isDirectory()) {
+                results.push(...findJsonFiles(fullPath));
+              } else if (entry.isFile() && entry.name.endsWith('.json')) {
+                results.push(fullPath);
+              }
+            }
+
+            return results;
+          }
+
+          const files = findJsonFiles(root);
+
+          console.log(`Found ${files.length} result JSON files.`);
+
+          for (const file of files) {
+            try {
+              const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+              const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+
+              for (const item of alerts) {
+                rows.push({
+                  product: item.name || '',
+                  mrp: item.mrp ?? '',
+                  price: item.price ?? '',
+                  discount: item.discount ?? '',
+                  category: item.category || '',
+                  subCategory: item.subCategory || '',
+                  previousPrice: item.prevPrice ?? '',
+                  previousDiscount: item.prevDiscount ?? '',
+                  alertType: item.alertType || '',
+                  dealType: item.dealType || data.campaign || '',
+                  skuId: item.skuId || '',
+                  brand: item.brand || '',
+                  pack: item.pack || '',
+                  rating: item.rating || '',
+                  ratingCount: item.ratingCount || '',
+                  link: item.itemLink || item.searchLink || ''
+                });
+              }
+            } catch (error) {
+              console.error(`Could not read ${file}:`, error.message);
+            }
+          }
+
+          rows.sort((a, b) => {
+            return Number(b.discount || 0) - Number(a.discount || 0);
+          });
+
+          const header = [
+            'Product',
+            'MRP',
+            'Current Price',
+            'Discount %',
+            'Category',
+            'Subcategory',
+            'Previous Price',
+            'Previous Discount %',
+            'Alert Type',
+            'Worker',
+            'SKU ID',
+            'Brand',
+            'Pack',
+            'Rating',
+            'Rating Count',
+            'Swiggy Link'
+          ];
+
+          const csv = [
+            header.join(','),
+            ...rows.map(row => [
+              row.product,
+              row.mrp,
+              row.price,
+              row.discount,
+              row.category,
+              row.subCategory,
+              row.previousPrice,
+              row.previousDiscount,
+              row.alertType,
+              row.dealType,
+              row.skuId,
+              row.brand,
+              row.pack,
+              row.rating,
+              row.ratingCount,
+              row.link
+            ].map(csvEscape).join(','))
+          ].join('\n');
+
+          fs.writeFileSync(output, csv, 'utf8');
+
+          console.log(`Created ${output}`);
+          console.log(`Total deals: ${rows.length}`);
+          NODE
+
+      - name: Upload Combined CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-deals-csv
+          path: combined/all-deals.csv
+          if-no-files-found: error
