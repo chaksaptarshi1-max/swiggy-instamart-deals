@@ -82,3 +82,11 @@ jobs:
         with:
           path: swiggy-telegram-bot/data
           key: deal-cache-${{ matrix.worker }}-${{ github.run_id }}
+
+      - name: Upload Deal Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deal-results-${{ matrix.worker }}
+          path: swiggy-telegram-bot/results/
+          if-no-files-found: ignore
