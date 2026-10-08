@@ -1963,11 +1963,23 @@
           "taxonomyType": "IM Meatsy"
         },
         {
-          "category": "Electronics and Appliances",
-          "name": "Earphones & headsets",
-          "id": "6903b179fe6d7500013a0d61",
-          "taxonomyType": "IM Meatsy"
-        },
+  "category": "Electronics and Appliances",
+  "name": "Earphones & headsets",
+  "id": "6903b179fe6d7500013a0d61",
+  "taxonomyType": "IM Meatsy"
+},
+{
+  "category": "Mobiles and Electronics",
+  "name": "Home Appliances",
+  "id": "6822eef009ab2e00019aa628",
+  "taxonomyType": "Health and Wellness Stores"
+},
+{
+  "category": "Toys and Stationery",
+  "name": "Pen,Pencils and markers",
+  "id": "6903b179fe6d7500013a0d54",
+  "taxonomyType": "IM Meatsy"
+},
         {
           "category": "Toys and Stationery",
           "name": "Pen,Pencils and markers",
